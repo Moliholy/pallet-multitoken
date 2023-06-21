@@ -1,0 +1,39 @@
+[package]
+name = "pallet-multitoken"
+version = "0.0.1"
+authors = ["José Molina <jose.molina@parity.io>"]
+edition = "2021"
+license = "Unlicensed"
+homepage = "https://substrate.io"
+repository = "https://github.com/Moliholy/pallet-multitoken"
+description = "FRAME pallet for ERC1155 tokens"
+
+[package.metadata.docs.rs]
+targets = ["x86_64-unknown-linux-gnu"]
+
+[dependencies]
+codec = { package = "parity-scale-codec", version = "3.2.2", default-features = false, features = ["derive", "max-encoded-len"] }
+frame-benchmarking = { version = "4.0.0-dev", default-features = false, optional = true, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.43" }
+frame-support = { version = "4.0.0-dev", default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.43" }
+frame-system = { version = "4.0.0-dev", default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.43" }
+scale-info = { version = "2.5.0", default-features = false, features = ["derive"] }
+sp-core = { version = "7.0.0", default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.43" }
+sp-runtime = { version = "7.0.0", default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.43" }
+
+[dev-dependencies]
+
+[features]
+default = ["std"]
+std = [
+	"frame-benchmarking?/std",
+	"codec/std",
+	"frame-support/std",
+	"frame-system/std",
+	"scale-info/std",
+]
+runtime-benchmarks = [
+	"frame-benchmarking",
+	"frame-support/runtime-benchmarks",
+	"frame-system/runtime-benchmarks",
+]
+try-runtime = ["frame-support/try-runtime"]
