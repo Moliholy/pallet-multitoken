@@ -28,14 +28,19 @@ mod benchmarking;
 pub mod pallet {
     use alloc::vec;
     use alloc::vec::Vec;
-    use codec::Codec;
     use core::fmt::Debug;
+
+    use codec::Codec;
     use frame_support::pallet_prelude::*;
     use frame_system::pallet_prelude::*;
-    use sp_runtime::traits::AtLeast32BitUnsigned;
     use sp_runtime::FixedPointOperand;
+    use sp_runtime::traits::AtLeast32BitUnsigned;
 
     use super::*;
+
+    pub trait Next {
+        fn next(&self) -> Self;
+    }
 
     #[pallet::config]
     pub trait Config: frame_system::Config {
@@ -43,7 +48,7 @@ pub mod pallet {
         type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 
         /// Identifier for the collection of item.
-        type CollectionId: Member + Parameter + MaxEncodedLen + Copy;
+        type CollectionId: Member + Parameter + MaxEncodedLen + Copy + Default + Next;
 
         /// Identifier for numerical amounts.
         type Amount: Parameter
@@ -102,7 +107,26 @@ pub mod pallet {
         InvalidArrayLength,
         /// User has not enough balance of a given token collection.
         InsufficientBalance,
+        /// The collection does not exist.
+        CollectionDoesNotExist,
+        /// The account is not the one that created the collection.
+        InvalidOwner,
     }
+
+    /// Stores the `CollectionId` that is going to be used for the next collection.
+    /// This gets incremented whenever a new collection is created.
+    #[pallet::storage]
+    pub type NextCollectionId<T: Config> = StorageValue<_, T::CollectionId, ValueQuery>;
+
+    #[pallet::storage]
+    #[pallet::getter(fn collections)]
+    pub type Collections<T: Config> = CountedStorageMap<
+        _,
+        Twox64Concat,
+        T::CollectionId,
+        T::AccountId,
+        OptionQuery,
+    >;
 
     /// Maps collection to account balance.
     #[pallet::storage]
@@ -114,7 +138,7 @@ pub mod pallet {
         Twox64Concat,
         T::AccountId,
         T::Amount,
-        ValueQuery,
+        OptionQuery,
     >;
 
     /// Maps owner to operator approval.
@@ -194,8 +218,10 @@ pub mod pallet {
             id: T::CollectionId,
             amount: T::Amount,
         ) -> DispatchResult {
-            ensure_root(origin.clone())?;
             let sender = ensure_signed(origin)?;
+            let owner = Collections::<T>::get(id);
+            ensure!(owner.is_some(), Error::<T>::CollectionDoesNotExist);
+            ensure!(owner.unwrap() == sender, Error::<T>::InvalidOwner);
             Self::update(sender, None, Some(to), vec![id], vec![amount])
         }
 
@@ -221,7 +247,6 @@ pub mod pallet {
             id: T::CollectionId,
             amount: T::Amount,
         ) -> DispatchResult {
-            ensure_root(origin.clone())?;
             let sender = ensure_signed(origin)?;
             Self::update(sender.clone(), Some(sender), None, vec![id], vec![amount])
         }
@@ -234,9 +259,19 @@ pub mod pallet {
             ids: Vec<T::CollectionId>,
             amounts: Vec<T::Amount>,
         ) -> DispatchResult {
-            ensure_root(origin.clone())?;
             let sender = ensure_signed(origin)?;
             Self::update(sender.clone(), Some(sender), None, ids, amounts)
+        }
+
+        /// Creates a new collection
+        #[pallet::call_index(7)]
+        #[pallet::weight({0})]
+        pub fn create(origin: OriginFor<T>) -> DispatchResult {
+            let sender = ensure_signed(origin)?;
+            let collection_id = NextCollectionId::<T>::get();
+            Collections::<T>::insert(collection_id, sender);
+            NextCollectionId::<T>::set(collection_id.next());
+            Ok(())
         }
     }
 
@@ -255,7 +290,7 @@ pub mod pallet {
                 let amount = amounts[i];
 
                 if let Some(from) = &from {
-                    let from_balance = Balances::<T>::get(id, from);
+                    let from_balance = Balances::<T>::get(id, from).ok_or(<Error<T>>::CollectionDoesNotExist)?;
                     ensure!(from_balance >= amount, Error::<T>::InsufficientBalance);
                     Balances::<T>::insert(id, from, from_balance - amount);
                 }
@@ -286,7 +321,7 @@ pub mod pallet {
         }
 
         /// Returns the amount of tokens of token type `id` owned by `account`.
-        pub fn balance_of(account: &T::AccountId, id: &T::CollectionId) -> T::Amount {
+        pub fn balance_of(account: &T::AccountId, id: &T::CollectionId) -> Option<T::Amount> {
             Balances::<T>::get(id, account)
         }
 
@@ -294,14 +329,14 @@ pub mod pallet {
         pub fn balance_of_batch(
             accounts: &Vec<T::AccountId>,
             ids: &Vec<T::CollectionId>,
-        ) -> Option<Vec<T::Amount>> {
+        ) -> Option<Vec<Option<T::Amount>>> {
             let len = accounts.len();
             if len != ids.len() {
                 return None;
             }
             let mut balances = Vec::with_capacity(len);
             for i in 0..len {
-                balances[i] = Self::balance_of(&accounts[i], &ids[i]);
+                balances[i] = Balances::<T>::get(&ids[i], &accounts[i]);
             }
             Some(balances)
         }
