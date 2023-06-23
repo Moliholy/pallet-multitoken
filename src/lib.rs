@@ -31,6 +31,7 @@ pub mod pallet {
     use core::fmt::Debug;
 
     use codec::Codec;
+    use core::default::Default;
     use frame_support::pallet_prelude::*;
     use frame_system::pallet_prelude::*;
     use sp_runtime::traits::AtLeast32BitUnsigned;
@@ -73,6 +74,11 @@ pub mod pallet {
     #[pallet::event]
     #[pallet::generate_deposit(pub (super) fn deposit_event)]
     pub enum Event<T: Config> {
+        /// A new collection has been created
+        CollectionCreated {
+            id: T::CollectionId,
+            owner: T::AccountId,
+        },
         /// Emitted when `value` tokens of token type `id` are transferred from `from` to `to` by `operator`.
         TransferSingle {
             operator: T::AccountId,
@@ -116,6 +122,7 @@ pub mod pallet {
     /// Stores the `CollectionId` that is going to be used for the next collection.
     /// This gets incremented whenever a new collection is created.
     #[pallet::storage]
+    #[pallet::getter(fn next_collection_id)]
     pub type NextCollectionId<T: Config> = StorageValue<_, T::CollectionId, ValueQuery>;
 
     #[pallet::storage]
@@ -264,8 +271,12 @@ pub mod pallet {
         pub fn create(origin: OriginFor<T>) -> DispatchResult {
             let sender = ensure_signed(origin)?;
             let collection_id = NextCollectionId::<T>::get();
-            Collections::<T>::insert(collection_id, sender);
+            Collections::<T>::insert(collection_id, sender.clone());
             NextCollectionId::<T>::set(collection_id.next());
+            Self::deposit_event(Event::<T>::CollectionCreated {
+                id: collection_id,
+                owner: sender,
+            });
             Ok(())
         }
     }
@@ -317,22 +328,22 @@ pub mod pallet {
         }
 
         /// Returns the amount of tokens of token type `id` owned by `account`.
-        pub fn balance_of(account: &T::AccountId, id: &T::CollectionId) -> Option<T::Amount> {
-            Balances::<T>::get(id, account)
+        pub fn balance_of(account: &T::AccountId, id: &T::CollectionId) -> T::Amount {
+            Balances::<T>::get(id, account).unwrap_or_default()
         }
 
         /// Version of `balance_of`.
         pub fn balance_of_batch(
             accounts: &Vec<T::AccountId>,
             ids: &Vec<T::CollectionId>,
-        ) -> Option<Vec<Option<T::Amount>>> {
+        ) -> Option<Vec<T::Amount>> {
             let len = accounts.len();
             if len != ids.len() {
                 return None;
             }
             let mut balances = Vec::with_capacity(len);
             for i in 0..len {
-                balances[i] = Balances::<T>::get(ids[i], &accounts[i]);
+                balances[i] = Self::balance_of(&accounts[i], &ids[i]);
             }
             Some(balances)
         }
