@@ -33,8 +33,8 @@ pub mod pallet {
     use codec::Codec;
     use frame_support::pallet_prelude::*;
     use frame_system::pallet_prelude::*;
-    use sp_runtime::FixedPointOperand;
     use sp_runtime::traits::AtLeast32BitUnsigned;
+    use sp_runtime::FixedPointOperand;
 
     use super::*;
 
@@ -120,13 +120,8 @@ pub mod pallet {
 
     #[pallet::storage]
     #[pallet::getter(fn collections)]
-    pub type Collections<T: Config> = CountedStorageMap<
-        _,
-        Twox64Concat,
-        T::CollectionId,
-        T::AccountId,
-        OptionQuery,
-    >;
+    pub type Collections<T: Config> =
+        CountedStorageMap<_, Twox64Concat, T::CollectionId, T::AccountId, OptionQuery>;
 
     /// Maps collection to account balance.
     #[pallet::storage]
@@ -290,7 +285,8 @@ pub mod pallet {
                 let amount = amounts[i];
 
                 if let Some(from) = &from {
-                    let from_balance = Balances::<T>::get(id, from).ok_or(<Error<T>>::CollectionDoesNotExist)?;
+                    let from_balance =
+                        Balances::<T>::get(id, from).ok_or(<Error<T>>::CollectionDoesNotExist)?;
                     ensure!(from_balance >= amount, Error::<T>::InsufficientBalance);
                     Balances::<T>::insert(id, from, from_balance - amount);
                 }
@@ -336,7 +332,7 @@ pub mod pallet {
             }
             let mut balances = Vec::with_capacity(len);
             for i in 0..len {
-                balances[i] = Balances::<T>::get(&ids[i], &accounts[i]);
+                balances[i] = Balances::<T>::get(ids[i], &accounts[i]);
             }
             Some(balances)
         }
@@ -344,6 +340,10 @@ pub mod pallet {
         /// Returns true if `operator` is approved to transfer `account`'s tokens.
         pub fn is_approved_for_all(account: &T::AccountId, operator: &T::AccountId) -> bool {
             OperatorApprovals::<T>::get(account, operator)
+        }
+
+        pub fn all_collections() -> Vec<(T::CollectionId, T::AccountId)> {
+            Collections::<T>::iter().collect()
         }
     }
 }
